@@ -1,0 +1,40 @@
+# OAM sink / link — change note (VPCESSM_TEST)
+
+Template: **AMEX_ACCOUNT_TEMPLATE_INTRANET_VPCESSM_TEST** only.
+
+## What this does
+
+- **CloudWatch OAM:** source account creates an **`aws_oam_link`** to the **monitoring account sink** (Security_Monitoring **290063788431**) so metrics, log groups, and X-Ray traces can be viewed from the central account.
+- **Sink** = the `arn:aws:oam:<region>:<monitoring-account-id>:sink/<uuid>` value passed as `sink_identifier` on the link.
+
+## Where the sink ARNs live now (hardcoded)
+
+**File:** `terraform/amex_core.tf` — top **`locals`** block:
+
+| Local | Region | Purpose |
+|--------|--------|--------|
+| `central_oam_sink_arn_us_west_2` | us-west-2 | West `amex_core` module; full OAM sink ARN string. **Edit this line** when the west sink UUID or account changes. |
+| `central_oam_sink_arn_us_east_1` | us-east-1 | East `amex_core` module. Currently **`""`** (no east link). **Set** to a full `arn:aws:oam:us-east-1:290063788431:sink/...` when a us-east-1 sink exists; leave `""` to skip. |
+
+`module.amex_core_us_west_2` and `module.amex_core_us_east_1` pass these locals into the child module as `central_monitoring_sink_arn`.
+
+## Module / resource
+
+| File | Role |
+|------|------|
+| `terraform/modules/amex_core/oam-link.tf` | Defines **`aws_oam_link.central_link`**. `count` is 0 when the passed-in sink arn is empty. Comment points back to **`amex_core.tf`** locals. |
+| `terraform/modules/amex_core/variables.tf` | Module input **`central_monitoring_sink_arn`** (still a variable **into** the module; value is supplied from root locals above). |
+
+## Root variables removed
+
+**File:** `terraform/variables.tf`
+
+- Removed **`central_monitoring_sink_arn`** and **`central_monitoring_sink_arn_us_east_1`** so sink ARNs are **not** Terraform Cloud / workspace variables for this template.
+
+If those variables still exist on a workspace, remove them to avoid “undeclared variable” or unused-input warnings (exact behavior depends on Terraform / TFE version).
+
+## Operational reminders
+
+- Sink ARN **region** must match the **AWS provider region** for that `amex_core` instance (west vs east).
+- Central account must still allow this source account (sink policy / org rules); this repo only creates the **link** side.
+- After changing a sink ARN string, run **plan/apply** on the account customization workspace so the link updates if the sink id changed.
